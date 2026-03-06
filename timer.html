@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aesthetic Ultimate Cube Timer</title>
+    <style>
+        :root {
+            --bg-base: #0a0a0c;
+            --bg-overlay: rgba(10, 10, 12, 0.85);
+            --accent: #38bdf8;
+            --ready: #22c55e;
+            --holding: #eab308;
+            --text: #f8fafc;
+            --panel: rgba(255, 255, 255, 0.05);
+            --sidebar-bg: rgba(0, 0, 0, 0.4);
+            --danger: #ef4444;
+        }
+
+        body.light-mode {
+            --bg-base: #f1f5f9;
+            --bg-overlay: rgba(241, 245, 249, 0.85);
+            --text: #0f172a;
+            --panel: rgba(0, 0, 0, 0.08);
+            --sidebar-bg: rgba(255, 255, 255, 0.6);
+        }
+
+        body.amoled-mode {
+            --bg-base: #000000;
+            --bg-overlay: rgba(0, 0, 0, 0.95);
+            --panel: rgba(255, 255, 255, 0.02);
+        }
+
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg-base) url('https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop') no-repeat center center fixed;
+            background-size: cover;
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            transition: all 0.3s ease;
+        }
+
+        .overlay { position: absolute; inset: 0; background: var(--bg-overlay); backdrop-filter: blur(25px); z-index: 1; }
+
+        /* Sidebar */
+        .sidebar {
+            position: relative; z-index: 2; width: 320px;
+            background: var(--sidebar-bg); border-right: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 30px; display: flex; flex-direction: column;
+            backdrop-filter: blur(15px);
+        }
+
+        .main-content {
+            position: relative; z-index: 2; flex: 1;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+
+        /* Stats Styling */
+        .stat-group { margin-bottom: 25px; }
+        .stat-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 5px; }
+        .stat-value { font-size: 1.8rem; font-weight: 800; color: var(--accent); }
+        .wr-value { color: var(--danger); }
+
+        #timerDisplay {
+            font-size: clamp(6rem, 20vw, 12rem); font-weight: 900; font-variant-numeric: tabular-nums;
+            margin: 0; transition: color 0.2s, transform 0.1s;
+            text-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .holding { color: var(--holding); transform: scale(0.98); }
+        .ready { color: var(--ready); transform: scale(1.02); }
+
+        /* Settings Side Menu */
+        .settings-toggle {
+            position: absolute; top: 25px; right: 25px; z-index: 10;
+            background: var(--panel); border: none; color: var(--text);
+            padding: 12px; border-radius: 50%; cursor: pointer; font-size: 1.5rem;
+            transition: transform 0.3s;
+        }
+        .settings-toggle:hover { transform: rotate(45deg); background: rgba(255,255,255,0.1); }
+
+        .settings-menu {
+            position: absolute; top: 0; right: -350px; width: 320px; height: 100%;
+            background: var(--sidebar-bg); backdrop-filter: blur(40px);
+            z-index: 100; transition: right 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            padding: 40px 30px; border-left: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .settings-menu.open { right: 0; }
+
+        .settings-group { margin-bottom: 30px; }
+        .settings-group label { display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 10px; text-transform: uppercase; }
+        
+        select, input[type="range"] {
+            width: 100%; background: var(--panel); color: var(--text);
+            border: 1px solid rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 8px;
+            outline: none;
+        }
+
+        /* History */
+        .history-list { list-style: none; padding: 0; overflow-y: auto; flex: 1; margin-top: 10px; }
+        .history-item { 
+            padding: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        .btn {
+            width: 100%; padding: 12px; border-radius: 8px; cursor: pointer; 
+            font-weight: 600; transition: 0.2s; border: none; margin-top: 10px;
+        }
+        .btn-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
+        .btn-danger:hover { background: var(--danger); color: white; }
+        .btn-save { background: var(--accent); color: var(--bg-base); }
+
+        #statusLabel { letter-spacing: 5px; text-transform: uppercase; opacity: 0.4; font-size: 0.8rem; margin-top: 15px; }
+        .save-hint { margin-top: 25px; color: var(--accent); font-weight: bold; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+        .hidden { display: none; }
+    </style>
+</head>
+<body class="dark-mode">
+
+    <div class="overlay"></div>
+
+    <button class="settings-toggle" onclick="toggleSettings()">⚙️</button>
+
+    <div class="settings-menu" id="settingsMenu">
+        <h2 style="margin-top: 0; letter-spacing: -1px;">Settings</h2>
+        
+        <div class="settings-group">
+            <label>Theme</label>
+            <select id="themeSelect" onchange="changeTheme()">
+                <option value="dark-mode">Dark Deep</option>
+                <option value="light-mode">Clean Light</option>
+                <option value="amoled-mode">Amoled Black</option>
+            </select>
+        </div>
+
+        <div class="settings-group">
+            <label>Control Mode</label>
+            <select id="controlSelect">
+                <option value="ym">Y + M Keys (2s hold)</option>
+                <option value="space">Spacebar (0.5s hold)</option>
+            </select>
+        </div>
+
+        <div class="settings-group">
+            <label>Feedback Volume</label>
+            <input type="range" id="volumeSlider" min="0" max="1" step="0.1" value="0.5">
+        </div>
+
+        <button class="btn btn-save" onclick="exportHistory()">Download Times (.txt)</button>
+        <button class="btn btn-danger" onclick="toggleSettings()" style="background: rgba(255,255,255,0.05); color: white;">Close</button>
+    </div>
+
+    <div class="sidebar">
+        <div class="stat-group">
+            <div class="stat-label">World Record (3x3)</div>
+            <div class="stat-value wr-value">2.47s</div>
+        </div>
+
+        <div class="stat-group">
+            <div class="stat-label">Personal Best</div>
+            <div id="pbDisplay" class="stat-value">--</div>
+        </div>
+
+        <h3 style="font-weight: 500; color: #64748b; margin-bottom: 10px;">Recent Solves</h3>
+        <ul class="history-list" id="historyList"></ul>
+        <button class="btn btn-danger" onclick="clearAllData()">Clear All Data</button>
+    </div>
+
+    <div class="main-content">
+        <div id="timerDisplay">0.00</div>
+        <div id="statusLabel">Waiting...</div>
+        <div id="saveHint" class="save-hint hidden">PRESS "S" TO SAVE</div>
+    </div>
+
+    <script>
+        let timerInterval, startTime, lastTime = 0;
+        let isRunning = false, isReady = false, holdStart = null;
+        const keys = { y: false, m: false, space: false };
+        
+        const display = document.getElementById('timerDisplay');
+        const status = document.getElementById('statusLabel');
+        const settingsMenu = document.getElementById('settingsMenu');
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        let pb = localStorage.getItem('cube_pb_final') || Infinity;
+        renderPB();
+        renderHistory();
+
+        function toggleSettings() { settingsMenu.classList.toggle('open'); }
+        function changeTheme() { document.body.className = document.getElementById('themeSelect').value; }
+
+        function beep(freq = 440, duration = 0.08) {
+            const vol = document.getElementById('volumeSlider').value;
+            if (vol == 0) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            gain.gain.value = vol; osc.frequency.value = freq;
+            osc.start(); osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function formatTime(sec) {
+            if (sec === Infinity || isNaN(sec)) return "--";
+            const m = Math.floor(sec / 60);
+            const s = (sec % 60).toFixed(2);
+            return m > 0 ? `${m}:${s.padStart(5, '0')}` : s;
+        }
+
+        function renderPB() { document.getElementById('pbDisplay').innerText = formatTime(parseFloat(pb)); }
+
+        function renderHistory() {
+            const history = JSON.parse(localStorage.getItem('cube_history_final') || '[]');
+            document.getElementById('historyList').innerHTML = history.map((t, i) => 
+                `<li class="history-item"><span>#${history.length - i}</span> <b>${formatTime(t)}</b></li>`
+            ).join('');
+        }
+
+        function checkInput() {
+            if (isRunning) return;
+            const mode = document.getElementById('controlSelect').value;
+            let active = mode === 'ym' ? (keys.y && keys.m) : keys.space;
+            let reqHold = mode === 'ym' ? 2000 : 500;
+
+            if (active) {
+                if (!holdStart) {
+                    holdStart = Date.now();
+                    display.classList.add('holding');
+                    status.innerText = "HOLDING...";
+                }
+                if (Date.now() - holdStart >= reqHold && !isReady) {
+                    isReady = true;
+                    display.classList.replace('holding', 'ready');
+                    status.innerText = "READY!";
+                    beep(800, 0.05);
+                }
+            } else {
+                holdStart = null;
+                if (!isReady) {
+                    display.classList.remove('holding', 'ready');
+                    status.innerText = mode === 'ym' ? "HOLD Y + M" : "HOLD SPACEBAR";
+                }
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.repeat) return;
+            const k = e.key.toLowerCase();
+            if (k === 'y') keys.y = true;
+            if (k === 'm') keys.m = true;
+            if (k === ' ') { keys.space = true; e.preventDefault(); }
+
+            if (isRunning) { stopTimer(); return; }
+            if (k === 's' && lastTime > 0) { saveTime(lastTime); lastTime = 0; document.getElementById('saveHint').classList.add('hidden'); }
+            checkInput();
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const k = e.key.toLowerCase();
+            if (isReady && (k === 'y' || k === 'm' || k === ' ')) { startTimer(); }
+            if (k === 'y') keys.y = false;
+            if (k === 'm') keys.m = false;
+            if (k === ' ') keys.space = false;
+            checkInput();
+        });
+
+        function startTimer() {
+            isReady = false; isRunning = true;
+            display.className = ''; status.innerText = "SOLVING...";
+            startTime = performance.now();
+            timerInterval = setInterval(() => {
+                display.innerText = formatTime((performance.now() - startTime) / 1000);
+            }, 10);
+        }
+
+        function stopTimer() {
+            isRunning = false; clearInterval(timerInterval);
+            lastTime = (performance.now() - startTime) / 1000;
+            display.innerText = formatTime(lastTime);
+            status.innerText = "STOPPED";
+            document.getElementById('saveHint').classList.remove('hidden');
+            beep(400, 0.1);
+        }
+
+        function saveTime(t) {
+            if (t < pb) { pb = t; localStorage.setItem('cube_pb_final', pb); renderPB(); }
+            const history = JSON.parse(localStorage.getItem('cube_history_final') || '[]');
+            history.unshift(t);
+            localStorage.setItem('cube_history_final', JSON.stringify(history.slice(0, 100)));
+            renderHistory();
+        }
+
+        function exportHistory() {
+            const history = JSON.parse(localStorage.getItem('cube_history_final') || '[]');
+            if (history.length === 0) return alert("Keine Zeiten zum Exportieren!");
+            const content = history.map((t, i) => `Solve #${history.length - i}: ${formatTime(t)}`).join('\n');
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'cube_times.txt'; a.click();
+        }
+
+        function clearAllData() {
+            if (confirm("Reset everything? PB and History will be lost.")) {
+                localStorage.clear();
+                location.reload();
+            }
+        }
+
+        setInterval(checkInput, 50);
+    </script>
+</body>
+</html>
